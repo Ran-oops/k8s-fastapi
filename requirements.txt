@@ -1,12 +1,44 @@
+# === Core Web Framework & Servers ===
+# The main web framework for building APIs
 fastapi
-uvicorn
-sqlalchemy
-python-dotenv
-email_validator
+
+# ASGI server for development and as a worker for Gunicorn
+uvicorn[standard]
+
+# Production-grade WSGI/ASGI server process manager
 gunicorn
-psycopg2-binary==2.9.*
-prometheus-fastapi-instrumentator
-prometheus_client
-prometheus-fastapi-instrumentator
+
+# === Database & ORM ===
+# The SQL toolkit and Object Relational Mapper (ORM)
+SQLAlchemy
+
+# PostgreSQL database driver for Python. 
+# The '-binary' version comes with pre-compiled binaries, avoiding build issues in Docker.
+psycopg2-binary
+
+# === Asynchronous Services Clients ===
+# The standard Python client for Redis (caching)
+redis
+
+# Asynchronous Python client for Kafka (message queue)
 aiokafka
+
+# === Observability (Monitoring & Logging) ===
+# Automatically instrument FastAPI applications to expose Prometheus metrics
+prometheus-fastapi-instrumentator
+
+# A library for producing structured JSON logs, perfect for collection by Logstash/Fluentd
 python-json-logger
+
+# === Search ===
+# The official asynchronous client for Elasticsearch
+elasticsearch[async]
+
+# === Configuration ===
+# For loading settings from environment variables into Pydantic models (best practice)
+pydantic-settings
+
+# === Best Practices: Database Migrations ===
+# A lightweight database migration tool for usage with the SQLAlchemy Database Toolkit.
+# Crucial for managing database schema changes in development and production.
+alembic

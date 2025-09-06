@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr,  Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 class UserBase(BaseModel):
     username: str
@@ -24,4 +24,37 @@ class User(UserBase):
     class Config:
         from_attributes = True
 
+# --- Review Schemas ---
 
+class ReviewBase(BaseModel):
+    rating: int = Field(..., gt=0, lt=6, description="Rating from 1 to 5")
+    comment: Optional[str] = None
+    product_id: int
+    user_id: int
+
+class ReviewCreate(ReviewBase):
+    pass
+
+class Review(ReviewBase):
+    id: int
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True # Pydantic V2 (旧版是 orm_mode = True)
+
+# --- Product Schemas ---
+
+class ProductBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    price: float = Field(..., gt=0)
+
+class ProductCreate(ProductBase):
+    pass
+
+class Product(ProductBase):
+    id: int
+    reviews: List[Review] = [] # 在读取单个商品时，也返回其所有评价
+
+    class Config:
+        from_attributes = True # Pydantic V2 (旧版是 orm_mode = True)

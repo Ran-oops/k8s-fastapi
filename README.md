@@ -1,7 +1,7 @@
 # FastAPI 商品评价系统
 
 使用 Docker Compose 和 Kubernetes 部署的 FastAPI + PostgreSQL + Redis + Kafka + Elasticsearch 项目，提供完整的商品管理和评价处理 API。
-
+集成的所有组件（FastAPI, PostgreSQL, Redis, Kafka, Prometheus, ELK Stack for logging, Elasticsearch for search）
 ## 功能特性
 
 - 创建和管理商品信息

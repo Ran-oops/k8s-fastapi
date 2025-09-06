@@ -32,6 +32,12 @@ def get_db():
     finally:
         db.close()
 
+# 在应用启动时创建表的逻辑(重要！)
+def create_db_and_tables():
+    # 这里的models需要被导入，SQLAlchemy才能知道有哪些表要创建
+    from . import models
+    Base.metadata.create_all(bind=engine, checkfirst=True)
+
 
 """
 db = SessionLocal()

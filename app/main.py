@@ -1,16 +1,17 @@
+# 1. Standard Library Imports
+import logging.config
+import uuid
+from contextlib import asynccontextmanager
+
+# 2. Third-Party Library Imports
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
-# from . import crud, models, schemas
-# from .database import engine, get_db
-# import crud, models, schemas
-from app import crud, models, schemas
-from app.database import engine, get_db
-from prometheus_fastapi_instrumentator import Instrumentator
-from app.config import settings
-from app.services import redis_service, kafka_producer
-from prometheus_client import Counter, Histogram
-import time
-import logging.config
+
+# 3. Local Application/Library Imports
+from . import crud, schemas
+from .database import get_db, create_db_and_tables
+from .services import kafka_producer, redis_service
+from .middlewares import monitor_requests
 
 # --- 日志配置 (ELK) ---
 LOGGING_CONFIG = {
@@ -19,7 +20,7 @@ LOGGING_CONFIG = {
     "formatters": {
         "json": {
             "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s %(pathname)s %(lineno)d %(funcName)s",
         },
     },
     "handlers": {
@@ -35,168 +36,211 @@ LOGGING_CONFIG = {
 logging.config.dictConfig(LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
-# --- 创建应用 ---
-app = FastAPI(title="Product Review System")
-
-# --- Prometheus 中间件 ---
-Instrumentator().instrument(app).expose(app)
-
-
-# --- Kafka 生产者生命周期事件 ---
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Starting up Kafka producer...")
+# --- Lifespan 管理器 ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 在应用启动时运行
+    logger.info("Application startup...", extra={"startup": True, "event": "startup"})
+    create_db_and_tables()
+    logger.info("Database tables checked/created.", extra={"db_init": True})
+    logger.info("Starting up Kafka producer...", extra={"kafka": "starting"})
     await kafka_producer.producer.start()
 
+    yield
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("Shutting down Kafka producer...")
+    # 在应用关闭时运行
+    logger.info("Application shutdown...", extra={"shutdown": True, "event": "shutdown"})
+    logger.info("Shutting down Kafka producer...", extra={"kafka": "stopping"})
     await kafka_producer.producer.stop()
 
+# --- 创建应用实例并注册lifespan ---
+app = FastAPI(
+    title="Product Review System",
+    lifespan=lifespan
+)
+app.middleware("http")(monitor_requests) # 注册方式略有不同
 
-# Dependency
-def get_db():
-    db = database.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+# --- Prometheus 中间件 ---
+# Instrumentator().instrument(app).expose(app)
+
 
 
 # --- API Endpoints ---
 @app.post("/products/", response_model=schemas.Product)
 def create_product(product: schemas.ProductCreate, db: Session = Depends(get_db)):
-    logger.info(f"Creating product with name: {product.name}")
-    return crud.create_product(db=db, product=product)
+    logger.info("Creating product", extra={
+        "event": "create_product",
+        "product_name": product.name,
+        "product_description": product.description
+    })
+    db_product = crud.create_product(db=db, product=product)
+    logger.info("Product created successfully", extra={
+        "event": "product_created",
+        "product_id": db_product.id,
+        "product_name": db_product.name
+    })
+    return db_product
 
 
 @app.get("/products/{product_id}", response_model=schemas.Product)
 def read_product(product_id: int, db: Session = Depends(get_db)):
-    logger.info(f"Reading product with id: {product_id}")
+    logger.info("Reading product", extra={
+        "event": "read_product",
+        "product_id": product_id
+    })
     # 1. 检查Redis缓存 (Redis)
     cached_product = redis_service.get_cached_product(product_id)
     if cached_product:
+        logger.info("Product found in cache", extra={
+            "event": "cache_hit",
+            "product_id": product_id
+        })
         return cached_product
 
     # 2. 如果缓存未命中，查询数据库 (PostgreSQL)
     db_product = crud.get_product(db, product_id=product_id)
     if db_product is None:
+        logger.warning("Product not found", extra={
+            "event": "product_not_found",
+            "product_id": product_id
+        })
         raise HTTPException(status_code=404, detail="Product not found")
 
     # 3. 将结果写入缓存 (Redis)
     redis_service.set_cached_product(db_product)
+    logger.info("Product retrieved from database and cached", extra={
+        "event": "cache_miss",
+        "product_id": product_id
+    })
     return db_product
 
 
 @app.post("/reviews/", status_code=202)  # 202 Accepted表示请求已接受，正在处理
 async def submit_review(review: schemas.ReviewCreate, db: Session = Depends(get_db)):
+    logger.info("Processing review submission", extra={
+        "event": "submit_review",
+        "product_id": review.product_id,
+        "user_id": review.user_id,
+        "rating": review.rating
+    })
     # 检查商品是否存在
     db_product = crud.get_product(db, product_id=review.product_id)
     if db_product is None:
+        logger.warning("Product not found for review", extra={
+            "event": "product_not_found_for_review",
+            "product_id": review.product_id
+        })
         raise HTTPException(status_code=404, detail="Product not found for this review")
 
     # 将评价事件异步发送到Kafka (Kafka)
     await kafka_producer.send_review_to_kafka(review)
-    logger.info(f"Review for product {review.product_id} accepted and sent to Kafka.")
+    logger.info("Review accepted and sent to Kafka", extra={
+        "event": "review_sent_to_kafka",
+        "product_id": review.product_id,
+        "user_id": review.user_id
+    })
     return {"message": "Review submission accepted."}
-
-
-# 创建自定义指标
-API_REQUESTS = Counter(
-    'myapp_http_requests_total',
-    'Total HTTP requests',
-    ['method', 'endpoint', 'http_status']
-)
-
-RESPONSE_TIME = Histogram(
-    'http_response_time_seconds',
-    'HTTP response time in seconds',
-    ['method', 'endpoint'],
-    buckets=[0.1, 0.5, 1, 2, 5]
-)
-
-# 创建数据库表
-models.Base.metadata.create_all(bind=engine)
-"""
-当类继承Base时：
-    1.sqlalchemy自动检测类属性
-    2.将这些属性转换为数据库列定义
-    3.将表信息注册到Base.metadata中
-"""
-"""
-create_all(bind=engine) - 表创建命令
-    1.扫描Base.metadata中的所有注册表信息
-    2.根据数据库类型生成对应的DDL(data definition language)语句
-    3.通过指定的engine连接到数据库
-    4.执行create table语句
-    5.只创建不存在的表，已存在的表不受影响
-"""
-
-app = FastAPI()
-
-
-# 添加中间件来记录自定义指标
-@app.middleware("http")
-async def monitor_requests(request: Request, call_next):
-    start_time = time.time()
-    response = await call_next(request)
-    process_time = time.time() - start_time
-
-    # 记录响应时间
-    RESPONSE_TIME.labels(
-        method=request.method,
-        endpoint=request.url.path
-    ).observe(process_time)
-
-    # 记录请求计数
-    API_REQUESTS.labels(
-        method=request.method,
-        endpoint=request.url.path,
-        http_status=response.status_code
-    ).inc()
-
-    return response
-
-
-# 添加Prometheus监控
-Instrumentator().instrument(app).expose(app)
 
 
 @app.post("/users/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    logger.info("Creating user", extra={
+        "event": "create_user",
+        "user_email": user.email
+    })
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
+        logger.warning("Email already registered", extra={
+            "event": "email_already_registered",
+            "user_email": user.email
+        })
         raise HTTPException(status_code=400, detail="Email already registered")
-    return crud.create_user(db=db, user=user)
+    
+    created_user = crud.create_user(db=db, user=user)
+    logger.info("User created successfully", extra={
+        "event": "user_created",
+        "user_id": created_user.id,
+        "user_email": created_user.email
+    })
+    return created_user
 
 
 @app.get("/users/", response_model=list[schemas.User])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    logger.info("Fetching users list", extra={
+        "event": "read_users",
+        "skip": skip,
+        "limit": limit
+    })
     users = crud.get_users(db, skip=skip, limit=limit)
+    logger.info("Users list fetched", extra={
+        "event": "users_fetched",
+        "count": len(users),
+        "skip": skip,
+        "limit": limit
+    })
     return users
 
 
 @app.get("/users/{user_id}", response_model=schemas.User)
 def read_user(user_id: int, db: Session = Depends(get_db)):
+    logger.info("Fetching user", extra={
+        "event": "read_user",
+        "user_id": user_id
+    })
     db_user = crud.get_user(db, user_id=user_id)
     if db_user is None:
+        logger.warning("User not found", extra={
+            "event": "user_not_found",
+            "user_id": user_id
+        })
         raise HTTPException(status_code=404, detail="User not found")
+    
+    logger.info("User found", extra={
+        "event": "user_found",
+        "user_id": user_id
+    })
     return db_user
 
 
 @app.put("/users/{user_id}", response_model=schemas.User)
 def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db)):
+    logger.info("Updating user", extra={
+        "event": "update_user",
+        "user_id": user_id
+    })
     db_user = crud.update_user(db, user_id=user_id, user_update=user_update)
     if db_user is None:
+        logger.warning("User not found for update", extra={
+            "event": "user_not_found_for_update",
+            "user_id": user_id
+        })
         raise HTTPException(status_code=404, detail="User not found")
+    
+    logger.info("User updated successfully", extra={
+        "event": "user_updated",
+        "user_id": user_id
+    })
     return db_user
 
 
 @app.delete("/users/{user_id}", status_code=status.HTTP_200_OK)
 def delete_user(user_id: int, db: Session = Depends(get_db)):
+    logger.info("Deleting user", extra={
+        "event": "delete_user",
+        "user_id": user_id
+    })
     if not crud.delete_user(db, user_id=user_id):
+        logger.warning("User not found for deletion", extra={
+            "event": "user_not_found_for_deletion",
+            "user_id": user_id
+        })
         raise HTTPException(status_code=404, detail="User not found")
+    
+    logger.info("User deleted successfully", extra={
+        "event": "user_deleted",
+        "user_id": user_id
+    })
     return {"detail": "User deleted successfully"}
 
 # dev运行命令：uvicorn app.main:app --reload
