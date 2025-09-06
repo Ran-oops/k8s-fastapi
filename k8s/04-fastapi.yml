@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-service
+  namespace: my-fastapi-stack
+  labels:
+    app: fastapi
+spec:
+  selector:
+    app: fastapi
+  ports:
+    - protocol: TCP
+      port: 80       # Service暴露给集群内部其他服务的端口
+      targetPort: 8000 # 容器内部FastAPI应用监听的端口
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-deployment
+  namespace: my-fastapi-stack
+  labels:
+    app: fastapi
+spec:
+  replicas: 2 # 部署2个副本以实现高可用性和负载均衡
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    metadata:
+      labels:
+        app: fastapi
+    spec:
+      containers:
+      - name: fastapi-app-container
+        # 确保这里是你构建并推送到镜像仓库的正确镜像地址
+        image: your-registry.io/your-username/fastapi-app:latest
+        imagePullPolicy: IfNotPresent # 在本地开发时优先使用本地镜像
+
+        ports:
+        - containerPort: 8000
+
+        # --- 健康检查探针 (生产环境最佳实践) ---
+        livenessProbe: # 存活探针：如果失败，K8s会重启容器
+          httpGet:
+            path: /health # 假设你的应用实现了这个端点
+            port: 8000
+          initialDelaySeconds: 20 # 首次检查前等待20秒
+          periodSeconds: 15     # 每15秒检查一次
+        readinessProbe: # 就绪探针：如果失败，Pod不会接收流量
+          httpGet:
+            path: /health # 假设你的应用实现了这个端点
+            port: 8000
+          initialDelaySeconds: 15 # 首次检查前等待15秒
+          periodSeconds: 10     # 每10秒检查一次
+
+        # --- 资源请求与限制 (生产环境最佳实践) ---
+        # resources:
+        #   requests:
+        #     cpu: "100m"
+        #     memory: "128Mi"
+        #   limits:
+        #     cpu: "500m"
+        #     memory: "512Mi"
+
+        # --- 环境变量注入 ---
+        # 将ConfigMap和Secret中的数据作为环境变量注入到容器中
+        env:
+        # --- 从 ConfigMap 'fastapi-config' 引用非敏感数据 ---
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: DATABASE_HOST
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: DATABASE_NAME
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: REDIS_HOST
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: KAFKA_BOOTSTRAP_SERVERS
+
+        # --- 从 Secret 'postgres-secret' 引用敏感数据 ---
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef: # 注意这里是 secretKeyRef
+              name: postgres-secret
+              key: POSTGRES_USER # 这里的键名是解码后的原始键名
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD # 这里的键名是解码后的原始键名

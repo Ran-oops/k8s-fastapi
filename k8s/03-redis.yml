@@ -1,0 +1,95 @@
+# --- Redis Service ---
+# 为Redis Pod提供一个稳定的内部网络端点，其他应用可以通过'redis-service'这个名字访问它
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: my-fastapi-stack
+  labels:
+    app: redis
+spec:
+  ports:
+    - port: 6379
+      name: redis
+  clusterIP: None # 创建一个Headless Service，用于StatefulSet的稳定网络发现
+  selector:
+    app: redis
+---
+# --- Redis StatefulSet ---
+# 使用StatefulSet来部署Redis，因为它是一个有状态的应用，需要持久化存储和稳定的网络ID
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-statefulset
+  namespace: my-fastapi-stack
+spec:
+  selector:
+    matchLabels:
+      app: redis # 必须与下面的template.metadata.labels匹配
+  serviceName: "redis-service" # 必须与上面定义的Headless Service的名称匹配
+  replicas: 1 # 我们先从一个Redis实例开始
+  template:
+    metadata:
+      labels:
+        app: redis # Pod的标签，Service会通过它来选择Pod
+    spec:
+      terminationGracePeriodSeconds: 10 # 优雅关闭Pod的等待时间
+      containers:
+      - name: redis
+        image: redis:7.2-alpine # 使用一个明确的、基于Alpine的轻量级版本
+        command:
+          - "redis-server"
+          - "/usr/local/etc/redis/redis.conf"
+        ports:
+        - containerPort: 6379
+          name: redis-port
+        # --- 健康检查 (Probes) ---
+        # 存活探针：如果失败，K8s会重启容器
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 15
+          timeoutSeconds: 5
+        # 就绪探针：如果失败，K8s会暂时将流量从这个Pod上移走
+        readinessProbe:
+          exec:
+            command:
+              - "redis-cli"
+              - "ping"
+          initialDelaySeconds: 15
+          timeoutSeconds: 5
+        # --- 卷挂载 ---
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data # Redis镜像默认的数据存储路径
+        - name: redis-config
+          mountPath: /usr/local/etc/redis
+      # --- 卷定义 ---
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-configmap # 引用下面定义的ConfigMap
+  # --- 持久化卷声明模板 ---
+  # 当StatefulSet创建Pod时，会自动为每个Pod创建一个匹配此模板的PVC
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ] # 该卷只能被单个节点读写挂载
+      resources:
+        requests:
+          storage: 2Gi # 为每个Redis实例申请2GB的存储空间
+---
+# --- Redis ConfigMap (可选但推荐) ---
+# 将Redis的配置外部化，便于管理
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-configmap
+  namespace: my-fastapi-stack
+data:
+  redis.conf: |
+    # 启用AOF持久化模式，比RDB更安全
+    appendonly yes
+    # 绑定到所有网络接口，以便在容器内可访问
+    bind 0.0.0.0

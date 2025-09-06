@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+python-dotenv
+email_validator
+gunicorn
+psycopg2-binary==2.9.*
+prometheus-fastapi-instrumentator
+prometheus_client
+prometheus-fastapi-instrumentator
+aiokafka
+python-json-logger

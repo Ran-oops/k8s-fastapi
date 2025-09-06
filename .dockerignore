@@ -1,0 +1,49 @@
+# 忽略敏感文件
+k8s/*secrets*.yml
+k8s/*secrets*.yaml
+k8s/07-secrets.yml
+
+# 忽略环境变量文件
+.env
+*.env
+.env.local
+.env.*.local
+
+# 忽略日志文件
+*.log
+
+# 忽略临时文件和目录
+*.tmp
+*.temp
+tmp/
+temp/
+
+# 忽略系统文件
+.DS_Store
+Thumbs.db
+
+# 忽略git相关文件
+.git
+.gitignore
+
+# 忽略IDE相关文件
+.vscode/
+.idea/
+
+# 忽略Python缓存和编译文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.pytest_cache/
+
+# 忽略测试相关目录
+tests/
+test_*
+*_test.py
+
+# 忽略文档目录
+docs/

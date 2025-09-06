@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: review-consumer-deployment
+  namespace: my-fastapi-stack
+  labels:
+    app: review-consumer
+spec:
+  # 我们先从1个副本开始，如果消息处理不过来，可以增加副本数
+  replicas: 1
+  selector:
+    matchLabels:
+      app: review-consumer
+  template:
+    metadata:
+      labels:
+        app: review-consumer
+    spec:
+      containers:
+      - name: review-consumer-container
+        # -------------------------------------------------------------
+        # !! 关键 !! 确保这里替换成你为消费者构建并推送的Docker镜像
+        # -------------------------------------------------------------
+        image: your-registry.io/your-username/review-consumer:latest
+        imagePullPolicy: IfNotPresent # 在本地开发时非常有用
+
+        # --- 资源请求与限制 (生产环境最佳实践) ---
+        # 消费者通常是CPU密集型或内存密集型，根据实际情况调整
+        # resources:
+        #   requests:
+        #     cpu: "100m"
+        #     memory: "128Mi"
+        #   limits:
+        #     cpu: "500m"
+        #     memory: "512Mi"
+
+        # --- 环境变量 (非常重要) ---
+        # 注入所有消费者应用连接外部服务所需的配置
+        env:
+        # PostgreSQL 连接信息
+        - name: DATABASE_HOST
+          value: "postgres-service" # Service名称
+        - name: DATABASE_NAME
+          value: "mydatabase" # 或者你指定的数据库名
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret # 引用我们之前创建的Secret
+              key: POSTGRES_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret # 引用我们之前创建的Secret
+              key: POSTG-RES_PASSWORD
+
+        # Kafka 连接信息
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: "kafka-0.kafka-headless.my-fastapi-stack.svc.cluster.local:9092" # 使用Kafka StatefulSet的完整内部DNS地址，更稳定
+
+        # Elasticsearch 连接信息 (如果消费者需要写入ES)
+        - name: ELASTICSEARCH_HOST
+          value: "elasticsearch-master:9200" # Helm chart中Elasticsearch Service的默认名称
+
+        # Redis 连接信息 (如果消费者也需要操作缓存)
+        - name: REDIS_HOST
+          value: "redis-service"

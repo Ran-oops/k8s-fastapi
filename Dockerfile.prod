@@ -1,0 +1,26 @@
+FROM python:3.9-slim as builder
+
+WORKDIR /app
+COPY requirements.txt .
+ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
+    PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+FROM python:3.9-slim
+WORKDIR /app
+
+# 从builder阶段复制已安装的包
+COPY --from=builder /root/.local /root/.local
+COPY . .
+
+# 确保脚本可执行
+RUN chmod +x /app/app/start.sh
+
+ENV PATH=/root/.local/bin:$PATH
+ENV PYTHONPATH=/app
+ENV MODE=PROD
+
+EXPOSE 8000
+
+CMD ["/app/app/start.sh"]

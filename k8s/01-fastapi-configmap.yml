@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-config # 名字可以保持不变
+  namespace: my-fastapi-stack
+data:
+  # --- 只存放非敏感的配置 ---
+  REDIS_HOST: "redis-service"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-0.kafka-headless.my-fastapi-stack.svc.cluster.local:9092" # 使用更稳定的地址
+  DATABASE_HOST: "postgres-service"
+  DATABASE_NAME: "mydatabase"
+  # 注意：这里没有任何密码！
