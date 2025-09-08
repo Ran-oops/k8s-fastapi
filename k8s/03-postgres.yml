@@ -43,6 +43,8 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          value: "mydatabase" # 告诉PostgreSQL创建一个名为'mydatabase'的数据库
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
         volumeMounts:

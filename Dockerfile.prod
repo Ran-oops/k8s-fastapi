@@ -8,6 +8,21 @@ ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
 RUN pip install --user --no-cache-dir -r requirements.txt
 
 FROM python:3.9-slim
+RUN echo "deb http://mirrors.aliyun.com/debian/ bullseye main non-free contrib" > /etc/apt/sources.list && \
+    echo "deb-src http://mirrors.aliyun.com/debian/ bullseye main non-free contrib" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian-security bullseye-security main" >> /etc/apt/sources.list && \
+    echo "deb-src http://mirrors.aliyun.com/debian-security bullseye-security main" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian/ bullseye-updates main non-free contrib" >> /etc/apt/sources.list && \
+    echo "deb-src http://mirrors.aliyun.com/debian/ bullseye-updates main non-free contrib" >> /etc/apt/sources.list
+
+# --- 现在执行安装命令 ---
+# - `apt-get update`: 更新本地包索引
+# - `apt-get install -y ...`: 安装netcat，`-y`表示自动确认
+# - `--no-install-recommends`: 不安装推荐的附加包，保持镜像最小化
+# - `rm -rf /var/lib/apt/lists/*`: 安装后清理APT缓存，减小镜像体积
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends netcat-openbsd curl && \
+    rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # 从builder阶段复制已安装的包

@@ -53,20 +53,23 @@ async def lifespan(app: FastAPI):
     logger.info("Application startup...")
     create_db_and_tables()
     logger.info("Database tables checked/created.")
-    logger.info("Starting up Kafka producer...")
 
     # 新增：检查并创建Elasticsearch索引
     await es_service.create_index_if_not_exists()
     logger.info("Elasticsearch index checked/created.")
 
-    await kafka_producer.producer.start()
+    # !! 关键修改 !!
+    # 调用新的启动函数，而不是直接访问 producer.start()
+    await kafka_producer.startup_kafka_producer()
 
     yield
 
     # 在应用关闭时运行
     logger.info("Application shutdown...")
-    logger.info("Shutting down Kafka producer...")
-    await kafka_producer.producer.stop()
+
+    # !! 关键修改 !!
+    # 调用新的关闭函数
+    await kafka_producer.shutdown_kafka_producer()
 
 
 # --- 创建FastAPI应用实例并注册生命周期事件 ---
