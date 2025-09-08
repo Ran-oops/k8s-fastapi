@@ -1,0 +1,77 @@
+# -----------------------------------------------------------
+# 完整的Filebeat Helm Chart Values文件 (用于部署到Kubernetes)
+# -----------------------------------------------------------
+
+# 将Filebeat部署为DaemonSet，确保每个节点上都有一个实例
+# 这是在K8s中收集节点日志的标准模式
+daemonset:
+  enabled: true
+
+# Filebeat的核心配置文件，通过一个ConfigMap挂载到Pod中
+filebeatConfig:
+  filebeat.yml: |
+    # ======================== Filebeat inputs =============================
+    # 配置Filebeat如何发现和读取日志源
+    filebeat.autodiscover:
+      providers:
+        # 使用Kubernetes提供者来自动发现Pod和容器
+        - type: kubernetes
+          node: ${NODE_NAME} # 从环境变量中获取当前节点的名称
+          hints.enabled: true
+          hints.default_config:
+            type: container
+            # 定义容器日志文件的路径模式
+            # Filebeat会自动替换 ${data.kubernetes.container.id}
+            paths:
+              - /var/log/containers/*-${data.kubernetes.container.id}.log
+            # 将多行日志（如Java的堆栈跟踪）合并为单个事件
+            multiline.pattern: '^[[:space:]]'
+            multiline.negate: false
+            multiline.match: after
+            # 将日志解析为JSON，并放置在json键下
+            json.keys_under_root: true
+            json.add_error_key: true
+            json.message_key: log
+
+    # ======================= Filebeat outputs ===============================
+    # 配置Filebeat将收集到的日志发送到哪里
+    output.logstash:
+      # 这里是你的Logstash Service在K8s中的地址和端口
+      # 格式: <service-name>.<namespace>.svc.cluster.local:<port>
+      # 这是最健壮的K8s内部服务地址格式
+      hosts: ["logstash-logstash.my-fastapi-stack.svc.cluster.local:5044"]
+      # (可选) 启用负载均衡，如果你的Logstash有多个副本
+      # loadbalance: true
+      # (可选) 启用压缩，减少网络带宽占用
+      # compression_level: 3
+
+# --- Kubernetes 资源配置 ---
+
+# 为Filebeat Pod设置资源请求和限制，防止其耗尽节点资源
+resources:
+  requests:
+    cpu: "100m"
+    memory: "100Mi"
+  limits:
+    cpu: "500m"
+    memory: "200Mi"
+
+# 设置安全上下文，Filebeat需要root权限来读取/var/log/下的文件
+podSecurityContext:
+  runAsUser: 0
+
+# --- 部署相关的其他配置 ---
+
+# Pod的更新策略
+updateStrategy:
+  type: RollingUpdate
+
+# 允许Filebeat在所有类型的节点上调度（包括master节点，如果需要的话）
+# tolerations:
+# - key: "node-role.kubernetes.io/master"
+#   effect: "NoSchedule"
+
+# (可选) 如果你的集群使用PodSecurityPolicies (PSP)，这里可能需要配置
+# podSecurityPolicy:
+#   create: true
+#   name: filebeat

@@ -7,8 +7,6 @@
 *.iml
 
 # Docker
-Dockerfile
-Dockerfile.prod
 docker-compose.yml
 docker-compose.prod.yml
 
@@ -21,10 +19,11 @@ __pycache__/
 # Env
 .env
 .env.prod
+*.env
+.env*
 
 # Docs & Misc
 README.md
 NOTE.md
 *.db
-*.txt
 *.exe

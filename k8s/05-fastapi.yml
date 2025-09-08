@@ -1,3 +1,9 @@
+# =================================================================
+# ===              FastAPI Application Service                  ===
+# =================================================================
+# 这个Service为FastAPI的Pod提供了一个稳定的内部网络入口(ClusterIP)。
+# Ingress Controller 和其他内部服务（如果需要）都应该通过这个Service来访问应用。
+
 apiVersion: v1
 kind: Service
 metadata:
@@ -5,14 +11,24 @@ metadata:
   namespace: my-fastapi-stack
   labels:
     app: fastapi
+    # 添加这个label是为了让kube-prometheus-stack的ServiceMonitor能够自动发现并监控这个服务
+    release: prometheus
 spec:
+  # selector将这个Service与带有'app: fastapi'标签的Pod关联起来
   selector:
     app: fastapi
   ports:
-    - protocol: TCP
-      port: 80       # Service暴露给集群内部其他服务的端口
-      targetPort: 8000 # 容器内部FastAPI应用监听的端口
+    - name: http-fastapi
+      protocol: TCP
+      port: 80         # Service暴露给集群内部的端口
+      targetPort: 8000   # 容器内部FastAPI应用实际监听的端口
+
 ---
+# =================================================================
+# ===             FastAPI Application Deployment                ===
+# =================================================================
+# 这个Deployment负责管理FastAPI应用的Pod的生命周期，包括创建、更新和扩缩容。
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,49 +37,54 @@ metadata:
   labels:
     app: fastapi
 spec:
-  replicas: 2 # 部署2个副本以实现高可用性和负载均衡
+  replicas: 2 # 部署2个Pod副本以实现高可用性和负载均衡
   selector:
     matchLabels:
       app: fastapi
   template:
     metadata:
+      # Pod的标签，必须与上面的selector.matchLabels和Service的selector匹配
       labels:
         app: fastapi
     spec:
       containers:
       - name: fastapi-app-container
         # 确保这里是你构建并推送到镜像仓库的正确镜像地址
-        image: your-registry.io/your-username/fastapi-app:latest
-        imagePullPolicy: IfNotPresent # 在本地开发时优先使用本地镜像
+        image: ziranziran/fastapi-app:latest
+        imagePullPolicy: IfNotPresent # 在本地开发时优先使用本地镜像，避免不必要的拉取
 
         ports:
         - containerPort: 8000
 
         # --- 健康检查探针 (生产环境最佳实践) ---
-        livenessProbe: # 存活探针：如果失败，K8s会重启容器
+        # 存活探针：如果失败（应用卡死），Kubernetes会重启容器
+        livenessProbe:
           httpGet:
-            path: /health # 假设你的应用实现了这个端点
+            path: /health # 你的应用必须实现这个端点并返回200 OK
             port: 8000
-          initialDelaySeconds: 20 # 首次检查前等待20秒
+          initialDelaySeconds: 20 # 容器启动后等待20秒再开始第一次检查
           periodSeconds: 15     # 每15秒检查一次
-        readinessProbe: # 就绪探针：如果失败，Pod不会接收流量
+
+        # 就绪探针：如果失败（应用正在启动或暂时繁忙），Pod不会接收来自Service的流量
+        readinessProbe:
           httpGet:
-            path: /health # 假设你的应用实现了这个端点
+            path: /health # 你的应用必须实现这个端点并返回200 OK
             port: 8000
-          initialDelaySeconds: 15 # 首次检查前等待15秒
+          initialDelaySeconds: 15 # 容器启动后等待15秒再开始第一次检查
           periodSeconds: 10     # 每10秒检查一次
 
-        # --- 资源请求与限制 (生产环境最佳实践) ---
+        # --- 资源请求与限制 (生产环境强烈推荐) ---
+        # 帮助Kubernetes调度器做出更好的决策，并保护节点资源
         # resources:
         #   requests:
-        #     cpu: "100m"
-        #     memory: "128Mi"
+        #     cpu: "200m"      # 至少需要0.2个CPU核心
+        #     memory: "256Mi"  # 至少需要256MB内存
         #   limits:
-        #     cpu: "500m"
-        #     memory: "512Mi"
+        #     cpu: "1000m"     # 最多使用1个CPU核心
+        #     memory: "1024Mi" # 最多使用1GB内存
 
         # --- 环境变量注入 ---
-        # 将ConfigMap和Secret中的数据作为环境变量注入到容器中
+        # 将ConfigMap和Secret中的数据作为环境变量注入到容器中，实现配置与代码分离
         env:
         # --- 从 ConfigMap 'fastapi-config' 引用非敏感数据 ---
         - name: DATABASE_HOST
@@ -86,11 +107,16 @@ spec:
             configMapKeyRef:
               name: fastapi-config
               key: KAFKA_BOOTSTRAP_SERVERS
+        - name: ELASTICSEARCH_URL
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: ELASTICSEARCH_URL
 
         # --- 从 Secret 'postgres-secret' 引用敏感数据 ---
         - name: DATABASE_USER
           valueFrom:
-            secretKeyRef: # 注意这里是 secretKeyRef
+            secretKeyRef:
               name: postgres-secret
               key: POSTGRES_USER # 这里的键名是解码后的原始键名
         - name: DATABASE_PASSWORD

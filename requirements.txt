@@ -42,3 +42,6 @@ pydantic-settings
 # A lightweight database migration tool for usage with the SQLAlchemy Database Toolkit.
 # Crucial for managing database schema changes in development and production.
 alembic
+
+asgi-correlation-id
+email-validator

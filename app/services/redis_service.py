@@ -4,8 +4,22 @@ import json
 import logging
 from ..config import settings
 from .. import schemas
+from prometheus_client import Counter # <-- 导入Counter
 
 logger = logging.getLogger(__name__)
+
+# --- 创建新的Prometheus指标 ---
+CACHE_HITS = Counter(
+    "myapp_cache_hits_total",
+    "Total number of cache hits",
+    ["cache_name"] # 添加一个标签，以便未来可以区分不同类型的缓存
+)
+CACHE_MISSES = Counter(
+    "myapp_cache_misses_total",
+    "Total number of cache misses",
+    ["cache_name"]
+)
+
 
 # 创建一个可复用的Redis连接池
 redis_pool = redis.ConnectionPool(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=0)
@@ -27,12 +41,14 @@ def get_cached_product(product_id: int):
             "event": "cache_hit",
             "product_id": product_id
         })
+        CACHE_HITS.labels(cache_name="product_cache").inc()
         return schemas.Product.model_validate(json.loads(product_data))
     
     logger.info("Cache miss for product", extra={
         "event": "cache_miss",
         "product_id": product_id
     })
+    CACHE_MISSES.labels(cache_name="product_cache").inc()
     return None
 
 def set_cached_product(product: schemas.Product):

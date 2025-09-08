@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     KAFKA_REVIEW_TOPIC: str = "product_reviews"
 
     # Elasticsearch
-    ELASTICSEARCH_HOST: str = "elasticsearch-master:9200"  # Helm chart中es service的默认名字
+    ELASTICSEARCH_URL: str = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch-master:9200")
 
     @property
     def DATABASE_URL(self) -> str:

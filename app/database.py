@@ -1,23 +1,20 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
-import os
-from dotenv import load_dotenv
+# import os
+# from dotenv import load_dotenv
 from .config import settings
 
-load_dotenv()
+# load_dotenv()
 
-# DATABASE_URL = f"mysql+pymysql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}@{os.getenv('DB_HOST')}:{os.getenv('DB_PORT')}/{os.getenv('DB_NAME')}"
-# DATABASE_URL = "sqlite:///./sql_app.db"
-# DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/test.db")
-if "sqlite" in settings.DATABASE_URL:
-    engine = create_engine(
-        settings.DATABASE_URL, connect_args={"check_same_thread": False}
-    )
-else:
-    engine = create_engine(settings.DATABASE_URL)
+# if "sqlite" in settings.DATABASE_URL:
+#     engine = create_engine(
+#         settings.DATABASE_URL, connect_args={"check_same_thread": False}
+#     )
+# else:
+#     engine = create_engine(settings.DATABASE_URL)
 # 创建数据库引擎
-# engine = create_engine(DATABASE_URL)
+engine = create_engine(settings.DATABASE_URL)
 # 将会话工厂绑定到数据库引擎
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -25,7 +22,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 def get_db():
-    print("yixie test=========================")
     db = SessionLocal()
     try:
         yield db

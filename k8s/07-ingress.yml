@@ -4,10 +4,16 @@ metadata:
   name: fastapi-ingress
   namespace: my-fastapi-stack
   annotations:
+    # 对于Docker Desktop的Nginx Ingress，这个注解通常是必需的
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
+  # -------------------------------------------------------------
+  # !! 关键 !! ingressClassName是必需的，尤其是在新版本中
+  # 它告诉K8s使用哪个Ingress Controller来处理这个Ingress
+  # -------------------------------------------------------------
+  ingressClassName: nginx
   rules:
-  - host: yourdomain.com # 替换成你的域名
+  - host: my-fastapi.local # <-- 在这里使用你的假域名
     http:
       paths:
       - path: /

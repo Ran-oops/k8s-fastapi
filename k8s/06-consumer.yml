@@ -21,7 +21,7 @@ spec:
         # -------------------------------------------------------------
         # !! 关键 !! 确保这里替换成你为消费者构建并推送的Docker镜像
         # -------------------------------------------------------------
-        image: your-registry.io/your-username/review-consumer:latest
+        image: ziranziran/review-consumer:latest
         imagePullPolicy: IfNotPresent # 在本地开发时非常有用
 
         # --- 资源请求与限制 (生产环境最佳实践) ---
@@ -58,7 +58,7 @@ spec:
           value: "kafka-0.kafka-headless.my-fastapi-stack.svc.cluster.local:9092" # 使用Kafka StatefulSet的完整内部DNS地址，更稳定
 
         # Elasticsearch 连接信息 (如果消费者需要写入ES)
-        - name: ELASTICSEARCH_HOST
+        - name: ELASTICSEARCH_URL
           value: "elasticsearch-master:9200" # Helm chart中Elasticsearch Service的默认名称
 
         # Redis 连接信息 (如果消费者也需要操作缓存)

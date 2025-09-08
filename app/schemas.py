@@ -24,6 +24,7 @@ class User(UserBase):
     class Config:
         from_attributes = True
 
+
 # --- Review Schemas ---
 
 class ReviewBase(BaseModel):
@@ -37,7 +38,7 @@ class ReviewCreate(ReviewBase):
 
 class Review(ReviewBase):
     id: int
-    created_at: datetime.datetime
+    created_at: datetime
 
     class Config:
         from_attributes = True # Pydantic V2 (旧版是 orm_mode = True)
@@ -58,3 +59,20 @@ class Product(ProductBase):
 
     class Config:
         from_attributes = True # Pydantic V2 (旧版是 orm_mode = True)
+
+class ProductSearchResult(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    price: float
+
+    class Config:
+        from_attributes = True
+
+# !! 新增这个 ProductUpdate 模型 !!
+class ProductUpdate(BaseModel):
+    # 更新时所有字段都应该是可选的
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = Field(None, gt=0)
+
