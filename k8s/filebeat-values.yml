@@ -63,8 +63,7 @@ podSecurityContext:
 # --- 部署相关的其他配置 ---
 
 # Pod的更新策略
-updateStrategy:
-  type: RollingUpdate
+updateStrategy: RollingUpdate
 
 # 允许Filebeat在所有类型的节点上调度（包括master节点，如果需要的话）
 # tolerations:

@@ -50,6 +50,32 @@ wait_for_port() {
 #  echo "Elasticsearch is healthy."
 #}
 
+wait_for_elasticsearch() {
+  local URL=$1
+  echo "Waiting for Elasticsearch at $URL to respond..."
+  local ELAPSED=0
+
+  # 使用 curl 请求根路径'/'，直到收到成功的HTTP响应 (2xx or 3xx)
+  # -s: 静默模式, -f: 失败时返回错误码, -o /dev/null: 忽略输出内容
+  while ! curl -s -f -o /dev/null "$URL/"; do
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "Timeout waiting for Elasticsearch to respond."
+      exit 1
+    fi
+
+    local RETRY_COUNT=${RETRY_COUNT:-0}
+    if [ $RETRY_COUNT -eq 0 ] || [ $(($RETRY_COUNT % 6)) -eq 0 ]; then
+      echo "Elasticsearch is not responding yet. Retrying... (waited ${ELAPSED}s)"
+    fi
+
+    sleep $INTERVAL
+    ELAPSED=$((ELAPSED + INTERVAL))
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+  done
+
+  echo "Elasticsearch is responding."
+}
+
 # --- 执行等待 ---
 DB_HOST=${DATABASE_HOST:-postgres-service}
 REDIS_HOST=${REDIS_HOST:-redis-service}
