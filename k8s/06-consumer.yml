@@ -51,7 +51,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: postgres-secret # 引用我们之前创建的Secret
-              key: POSTG-RES_PASSWORD
+              key: POSTGRES_PASSWORD
 
         # Kafka 连接信息
         - name: KAFKA_BOOTSTRAP_SERVERS

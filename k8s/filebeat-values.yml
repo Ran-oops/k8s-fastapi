@@ -29,9 +29,9 @@ filebeatConfig:
             multiline.negate: false
             multiline.match: after
             # 将日志解析为JSON，并放置在json键下
-            json.keys_under_root: true
-            json.add_error_key: true
-            json.message_key: log
+            # json.keys_under_root: true
+            # json.add_error_key: true
+            # json.message_key: log
 
     # ======================= Filebeat outputs ===============================
     # 配置Filebeat将收集到的日志发送到哪里
