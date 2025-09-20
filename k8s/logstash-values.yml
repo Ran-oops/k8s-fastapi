@@ -1,40 +1,41 @@
-# 定义Logstash的处理管道
-logstashPipeline:
-  # 'pipeline.yml' 是Logstash的主配置文件
-  pipeline.yml: |
-    - pipeline.id: main
-      path.config: "/usr/share/logstash/pipeline/logstash.conf"
+# k8s/logstash-values.yml (最终、最简化版本)
 
-# 'logstash.conf' 定义了输入、过滤和输出
+# -------------------------------------------------------------
+# 1. 为内部监控指定正确的Elasticsearch地址 (保持不变)
+# -------------------------------------------------------------
+elasticsearch:
+  hosts:
+    - http://elasticsearch-master.my-fastapi-stack.svc.cluster.local:9200
+
+# -------------------------------------------------------------
+# 2. 直接在 logstashConfig 中定义主配置文件内容
+# 这是Helm Chart最推荐的方式，它会自动处理挂载和路径问题
+# -------------------------------------------------------------
 logstashConfig:
+  # 'logstash.conf' 是一个Helm Chart期望的key
   logstash.conf: |
     # --- 输入阶段 ---
-    # 监听来自Filebeat的输入
     input {
       beats {
         port => 5044
       }
     }
 
-    # --- 过滤阶段 ---
-    # 我们的日志已经是JSON格式了，所以过滤非常简单
-    filter {
-      # 将'message'字段解析为JSON
-      json {
-        source => "message"
-      }
-      # （可选）可以添加其他过滤器，比如用grok解析非JSON日志，
-      # 或者用mutate过滤器移除不需要的字段
-    }
-
     # --- 输出阶段 ---
-    # 将处理好的日志发送到Elasticsearch
     output {
       elasticsearch {
-        # 这里是你的Elasticsearch Service在K8s中的地址
-        # 默认的ES Helm Chart会创建一个名为'elasticsearch-master'的服务
         hosts => ["http://elasticsearch-master.my-fastapi-stack.svc.cluster.local:9200"]
-        # 定义索引的名称，可以按天分片
         index => "fastapi-logs-%{+YYYY.MM.dd}"
       }
     }
+    
+service:
+  # 服务名称将是 "logstash"
+  name: logstash
+  type: ClusterIP
+  # 定义beats端口，这是Filebeat需要连接的端口
+  ports:
+    - name: beats
+      port: 5044
+      protocol: TCP
+      targetPort: 5044
