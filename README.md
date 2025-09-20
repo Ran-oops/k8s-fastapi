@@ -2,6 +2,7 @@
 
 使用 Docker Compose 和 Kubernetes 部署的 FastAPI + PostgreSQL + Redis + Kafka + Elasticsearch 项目，提供完整的商品管理和评价处理 API。
 集成的所有组件（FastAPI, PostgreSQL, Redis, Kafka, Prometheus, ELK Stack for logging, Elasticsearch for search）
+
 ## 功能特性
 
 - 创建和管理商品信息
@@ -11,6 +12,8 @@
 - 全文搜索支持（Elasticsearch）
 - 监控和指标收集（Prometheus + Grafana）
 - 容器化部署（Docker Compose & Kubernetes）
+- 结构化日志记录（ELK Stack）
+- 健康检查和错误处理
 
 ## 技术栈
 
@@ -23,6 +26,19 @@
 - **容器化**: Docker & Docker Compose
 - **编排**: Kubernetes
 - **监控**: Prometheus + Grafana
+- **日志**: ELK Stack (Elasticsearch, Logstash, Filebeat, Kibana)
+
+## 项目架构
+
+本项目采用微服务架构，通过异步消息队列实现评价处理的解耦。主要组件包括：
+
+1. **FastAPI 应用** - 提供 RESTful API 接口
+2. **PostgreSQL** - 主数据库，存储商品和评价数据
+3. **Redis** - 缓存层，提高数据访问速度
+4. **Kafka** - 消息队列，异步处理评价数据
+5. **Elasticsearch** - 搜索引擎，提供商品搜索功能
+6. **Prometheus + Grafana** - 监控系统，收集和可视化指标
+7. **ELK Stack** - 日志收集和分析系统
 
 ## 安装指南
 
@@ -74,6 +90,7 @@
 | POST | `/products/` | 创建新商品 |
 | GET | `/products/{product_id}` | 获取特定商品信息 |
 | POST | `/reviews/` | 提交商品评价（异步处理） |
+| GET | `/health` | 健康检查端点 |
 
 ## Kubernetes 部署
 
@@ -106,7 +123,8 @@
    ```bash
    # 应用所有 Kubernetes 配置
    kubectl apply -f k8s/
-   
+   ```
+
 3. 验证部署:
    ```bash
    # 检查 Pod 状态
@@ -168,24 +186,25 @@ fastapi_project/
 ├── requirements.txt          # Python 依赖
 └── .env                      # 环境变量（可选）
 ```
+
 ## 目录结构特点
+
 1. 分层清晰
-   * 服务配置（Nginx/Prometheus）与应用代码分离
-    * 监控系统配置集中管理
+   - 服务配置（Nginx/Prometheus）与应用代码分离
+   - 监控系统配置集中管理
 
 2. 安全性
-   * SSL 证书独立目录，方便权限控制
-   * 敏感配置（如数据库密码）通过 .env 或 Kubernetes Secrets 管理
+   - SSL 证书独立目录，方便权限控制
+   - 敏感配置（如数据库密码）通过 .env 或 Kubernetes Secrets 管理
 
 3. 可扩展性
-   * 添加新服务只需在 docker-compose.yml 或 k8s/ 目录下扩展
-   * 监控仪表盘通过 Grafana 目录动态加载
+   - 添加新服务只需在 docker-compose.yml 或 k8s/ 目录下扩展
+   - 监控仪表盘通过 Grafana 目录动态加载
 
 4. 生产就绪
-   * 包含从应用服务到监控的全套配置
-   * 支持 HTTPS、性能监控、数据持久化
-   * 支持 Docker Compose 和 Kubernetes 两种部署方式
-
+   - 包含从应用服务到监控的全套配置
+   - 支持 HTTPS、性能监控、数据持久化
+   - 支持 Docker Compose 和 Kubernetes 两种部署方式
 
 ## 开发说明
 
@@ -198,7 +217,7 @@ uvicorn app.main:app --reload
 
 运行生产服务器的命令:
 ```
-uvicorn app.main:app --host 0.0.0.0 --port 80 --workers 4
+gunicorn -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 app.main:app
 ```
 
 ## 监控
@@ -256,3 +275,56 @@ docker-compose -f docker-compose.prod.yml down
 docker-compose -f docker-compose.prod.yml up -d
 ```
 
+## 常见问题
+
+### 1. 权限问题
+在 Windows 系统上，可能会遇到 SSL 证书权限问题。可以使用以下命令解决：
+```powershell
+# 重置证书目录权限
+icacls nginx\ssl /reset
+icacls nginx\ssl /grant "Everyone:(R)"
+
+# 重置静态文件权限
+icacls .\app\static /grant "Everyone:(R)"
+```
+
+### 2. 网络连接问题
+如果容器间无法通信，可以检查网络连接：
+```bash
+# 检查容器网络
+docker network inspect yourproject_app-network
+
+# 在 Nginx 容器内测试连通性
+docker exec -it nginx_container sh
+ping web       # 应能解析IP
+nc -zv web 8000  # 应显示连接成功
+```
+
+### 3. 清理环境
+如果需要完全清理环境，可以使用以下命令：
+```bash
+# 停止并删除所有容器（包括运行的）
+docker-compose down --rmi all --volumes --remove-orphans
+
+# 强制删除镜像
+docker rmi -f fastapi_project-web:latest
+
+# 清理未使用的容器、网络、镜像和构建缓存
+docker system prune -a --volumes
+```
+
+## 安全建议
+
+1. 不要将敏感信息（如数据库密码）硬编码在代码中
+2. 使用环境变量或 Kubernetes Secrets 管理敏感信息
+3. 定期更新依赖包以修复安全漏洞
+4. 使用 HTTPS 加密通信
+5. 限制对管理接口的访问
+
+## 贡献指南
+
+1. Fork 项目
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
